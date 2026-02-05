@@ -11,6 +11,8 @@ import "./interfaces/IRouter.sol";
 import "./interfaces/ISubToken.sol";
 import "./interfaces/IVeToken.sol";
 import "./interfaces/IDataNft.sol";
+import "./libs/swap/IUniswapV2Router02.sol";
+import "./libs/swap/IUniswapV2Factory.sol";
 
 contract TokenFactoryV2 is
     Initializable,
@@ -212,6 +214,39 @@ contract TokenFactoryV2 is
         emit NewPersona(subTokenId, instance, address(0), address(0), address(0));  
 
         return instance;
+    }
+
+    function _createPair(address subToken) internal returns (address uniswapV2Pair_) {
+        uniswapV2Pair_ = IUniswapV2Factory(IUniswapV2Router02(_uniswapRouter).factory()).getPair(
+            subToken,
+            assetToken
+        );
+
+        if (uniswapV2Pair_ == address(0)) {
+            uniswapV2Pair_ = IUniswapV2Factory(IUniswapV2Router02(_uniswapRouter).factory())
+                .createPair(subToken, assetToken);
+        }
+        return (uniswapV2Pair_);
+    }
+
+    function _addLiquidity(address subToken) internal {
+        uint256 subAmount = IERC20(subToken).balanceOf(address(this));
+        uint256 assetAmount = IERC20(assetToken).balanceOf(address(this));
+        require(subAmount > 0 && assetAmount > 0, "No Token For LiquidityPair");
+
+        IERC20(subToken).approve(address(_uniswapRouter), subAmount);
+        IERC20(assetToken).approve(address(_uniswapRouter), assetAmount);
+        IUniswapV2Router02(_uniswapRouter)
+            .addLiquidity(
+                subToken,
+                assetToken,
+                subAmount,
+                assetAmount,
+                0,
+                0,
+                address(this),
+                block.timestamp
+            );
     }
 
     function totalSubTokens() public view returns (uint256) {
