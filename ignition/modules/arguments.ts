@@ -1,0 +1,9 @@
+export const mainSuppy = 100000000000000000000000000n;
+export const threshold = 100000000000000000000n;
+export const votingPeriod = 3600;
+export const stakeAmount = 50000000000000000000000000n;
+export const suppyMines = 200000000000000000000000000n;
+export const dayMines = 1000000000000000000000000n;
+export const decayPerDay = 5000000000000000000000n;
+export const mineBase = 5000;
+export const mineAddPerDay = 5;

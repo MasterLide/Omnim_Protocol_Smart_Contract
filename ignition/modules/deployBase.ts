@@ -1,6 +1,5 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-
-const mainSuppy = 100000000000000000000000000n;
+import { mainSuppy } from "./arguments.js"
 
 export default buildModule("BaseModule", (m) => {
   const deployer = m.getAccount(0);
