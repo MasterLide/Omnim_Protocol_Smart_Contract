@@ -11,8 +11,8 @@ import "./interfaces/IRouter.sol";
 import "./interfaces/ISubToken.sol";
 import "./interfaces/IVeToken.sol";
 import "./interfaces/IDataNft.sol";
-import "./libs/swap/IUniswapV2Router02.sol";
-import "./libs/swap/IUniswapV2Factory.sol";
+import "./interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IUniswapV2Factory.sol";
 
 contract TokenFactoryV2 is
     Initializable,
