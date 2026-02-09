@@ -19,7 +19,7 @@ describe("FactorySystem", async function () {
     await dataNft.write.initialize([senderClient.account.address]);
 
     const subToken = await viem.deployContract("SubToken");
-    await subToken.write.initialize(["SubToken","SBT",18,20000000000000000000n,1000000000000000000n,senderClient.account.address]);
+    await subToken.write.initialize(["SubToken","SBT",18,20000000000000000000n,senderClient.account.address]);
 
     const tokenFactory = await viem.deployContract("TokenFactory");
     await tokenFactory.write.initialize([

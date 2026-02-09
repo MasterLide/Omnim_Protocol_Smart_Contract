@@ -21,14 +21,12 @@ contract SubToken is ERC20Upgradeable, OwnableUpgradeable{
         string memory symbol_,
         uint8 decimals_,
         uint256 totalSupply_,
-        uint256 poolSupply_,
         address initialOwner
     ) external initializer {
         __Ownable_init(initialOwner);
         __ERC20_init(name_, symbol_);
         _decimals = decimals_;
-        if(poolSupply_ > 0) _mint(_msgSender(), poolSupply_);
-        _mint(initialOwner, totalSupply_ - poolSupply_);
+        _mint(initialOwner, totalSupply_);
     }
 
     function decimals() public view override returns (uint8) {

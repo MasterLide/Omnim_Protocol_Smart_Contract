@@ -1,28 +1,28 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
-import BaseModule from "./deployBase.js"
+import BaseV2Module from "./deployBaseV2.js"
 import { toHex } from "viem";
 import args from "./arguments.js"
 
-export default buildModule("UseProxyModule", (m) => {
+export default buildModule("UseProxyV2Module", (m) => {
   const deployer = m.getAccount(0);
-  const { mainToken, veToken, tokenDAO, minerPool, dataNft, subToken, tokenFactory } = m.useModule(BaseModule);
+  const { mainToken, veToken, tokenDAO, minerPool, dataNft, subToken, tokenFactoryV2,subMinerPool } = m.useModule(BaseV2Module);
   const emptybytes = toHex('');
   
-  const veTokenProxy = m.contract("MyProxy",[veToken,deployer,emptybytes],{ id: "Proxy1"});
+  const veTokenProxy = m.contract("MyProxy",[veToken,deployer,emptybytes],{ id: "veTokenProxy"});
   const veTokenContract = m.contractAt("VeToken",veTokenProxy);
 
-  const tokenDAOProxy = m.contract("MyProxy",[tokenDAO,deployer,emptybytes],{ id: "Proxy2"});
+  const tokenDAOProxy = m.contract("MyProxy",[tokenDAO,deployer,emptybytes],{ id: "tokenDAOProxy"});
   const tokenDAOContract = m.contractAt("TokenDAO",tokenDAOProxy);
 
-  const dataNftProxy = m.contract("MyProxy",[dataNft,deployer,emptybytes],{ id: "Proxy3"});
+  const dataNftProxy = m.contract("MyProxy",[dataNft,deployer,emptybytes],{ id: "dataNftProxy"});
   const dataNftContract = m.contractAt("DataNft",dataNftProxy);
 
-  const minerPoolProxy = m.contract("MyProxy",[minerPool,deployer,emptybytes],{ id: "Proxy4"});
+  const minerPoolProxy = m.contract("MyProxy",[minerPool,deployer,emptybytes],{ id: "minerPoolProxy"});
   const minerPoolContract = m.contractAt("MinerPool",minerPoolProxy);
 
-  const tokenFactoryProxy = m.contract("MyProxy",[tokenFactory,deployer,emptybytes],{ id: "Proxy5"});
-  const tokenFactoryContract = m.contractAt("TokenFactory",tokenFactoryProxy);
+  const tokenFactoryProxy = m.contract("MyProxy",[tokenFactoryV2,deployer,emptybytes],{ id: "tokenFactoryV2Proxy"});
+  const tokenFactoryContract = m.contractAt("TokenFactoryV2",tokenFactoryProxy);
 
   m.call(veTokenContract, "initialize", ["VeMainToken","VMT",deployer,mainToken,0n,true]);
   m.call(veTokenContract,"setMiner",[minerPoolProxy]);
@@ -32,7 +32,8 @@ export default buildModule("UseProxyModule", (m) => {
   m.call(dataNftContract,"initialize",[deployer]);
   m.call(dataNftContract,"grantRole",[m.staticCall(dataNftContract,"MINTER_ROLE"), tokenFactoryContract]);
 
-  m.call(tokenFactoryContract,"initialize",[subToken, mainToken, veTokenContract, subToken, dataNftContract, args.threshold, deployer]);
+  const a = m.call(tokenFactoryContract,"initialize",[subToken, mainToken, veTokenContract, subToken, dataNftContract, args.threshold, deployer]);
+  m.call(tokenFactoryContract,"addImplementations",[subToken,veToken,tokenDAO,subMinerPool],{after:[a]});
 
   m.call(minerPoolContract,"initialize",[mainToken,veTokenContract,args.dayMines,args.decayPerDay,args.mineBase,args.mineAddPerDay]);
 
@@ -43,5 +44,5 @@ export default buildModule("UseProxyModule", (m) => {
   m.call(minerPoolContract,"grantRole",[m.staticCall(minerPoolContract,"GOV_ROLE"),deployer]);
   m.call(mainToken,"transferOwnership",[tokenDAOContract]);
 
-  return { mainToken, veTokenContract, tokenDAOContract, minerPoolContract, dataNftContract, subToken, tokenFactoryContract };
+  return { mainToken, veTokenContract, tokenDAOContract, minerPoolContract, dataNftContract, subToken, tokenFactoryContract, subMinerPool};
 });

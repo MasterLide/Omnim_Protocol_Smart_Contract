@@ -5,6 +5,8 @@ interface IVeToken {
 
     function assetToken() external view returns(address);
 
+    function mineaddr() external view returns(address);
+
     function initialize(
         string memory _name,
         string memory _symbol,
@@ -21,6 +23,8 @@ interface IVeToken {
     ) external;
 
     function withdraw(uint256 amount) external;
+
+    function setMiner(address _miner) external;
 
     function getPastDelegates(
         address account,

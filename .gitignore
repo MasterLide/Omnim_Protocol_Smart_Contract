@@ -20,7 +20,7 @@
 /coverage
 
 #test files
-/scripts
+
 .env
 deployments
-pancake
+

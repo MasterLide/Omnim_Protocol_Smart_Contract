@@ -34,8 +34,9 @@ contract TokenFactory is
         uint256 withdrawableAmount;
         address proposer;
         uint256 subTokenId;
-        uint32 daoVotingPeriod;
-        uint256 daoThreshold;
+        uint8 decimals;
+        uint256 totalSupply;
+        address initialOwner;
     }
 
     uint256 private _nextId;
@@ -147,8 +148,9 @@ contract TokenFactory is
             pledgeAmount,
             sender,
             0,
-            0,
-            0
+            decimals,
+            totalSupply,
+            initialOwner
         );
         _applications[id] = application;
         emit NewApplication(id);
@@ -172,14 +174,12 @@ contract TokenFactory is
         application.status = ApplicationStatus.Executed;
 
         instance = Clones.clone(tokenImplementation[modelId]);
-        uint256 poolSupply = getPoolSupply(modelId,totalSupply);
 
         ISubToken(instance).initialize(
                     name,
                     symbol,
                     decimals,
                     totalSupply,
-                    poolSupply,
                     initialOwner
         );
 
@@ -207,7 +207,6 @@ contract TokenFactory is
 
         if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
         if(poolAmount > 0) IERC20(assetToken).transfer(_vault, poolAmount);
-        if(poolSupply > 0) IERC20(instance).transfer(_vault, poolSupply);
 
         emit NewPersona(subTokenId, instance, address(0), address(0), address(0));  
 

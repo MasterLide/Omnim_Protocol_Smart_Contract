@@ -7,10 +7,14 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/ISubToken.sol";
 import "./interfaces/IVeToken.sol";
+import "./interfaces/ITokenDAO.sol";
 import "./interfaces/IDataNft.sol";
+import "./interfaces/IMinerPool.sol";
+import "./interfaces/ISubMinerPool.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IUniswapV2Factory.sol";
 
@@ -36,8 +40,9 @@ contract TokenFactoryV2 is
         uint256 withdrawableAmount;
         address proposer;
         uint256 subTokenId;
-        uint32 daoVotingPeriod;
-        uint256 daoThreshold;
+        uint8 decimals;
+        uint256 totalSupply;
+        address initialOwner;
     }
 
     uint256 private _nextId;
@@ -71,6 +76,16 @@ contract TokenFactoryV2 is
     }
 
     ///////////////////////////////////////////////////////////////
+    //V2
+    uint32 daoVotingPeriod = 3600;
+    uint256 daoThreshold = 10 * 10 **18;
+    uint256 public maturityDuration; // Staking duration in seconds for initial LP. eg: 10years
+    address[] public veTokenImplementation;
+    address[] public allVeTokens;
+    address[] public daoImplementation;
+    address[] public allDAOs;
+    address[] public minerPoolImplementation;
+    address[] public allMinerPools;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -89,6 +104,9 @@ contract TokenFactoryV2 is
         __Pausable_init();
 
         tokenImplementation.push(tokenImplementation_);
+        veTokenImplementation.push(address(0));
+        daoImplementation.push(address(0));
+        minerPoolImplementation.push(address(0));
         assetToken = assetToken_;
         assetVeToken = assetVeToken_;
         usdtToken = usdtToken_;
@@ -149,44 +167,40 @@ contract TokenFactoryV2 is
             pledgeAmount,
             sender,
             0,
-            0,
-            0
+            decimals, 
+            totalSupply, 
+            initialOwner
         );
         _applications[id] = application;
         emit NewApplication(id);
 
-        _createNewSubToken(id, name, symbol, modelId, decimals, totalSupply, initialOwner);
+        if(modelId == 0)_createBaseSubToken(id);
         return id;
     }
 
-    function _createNewSubToken(
-        uint256 id,
-        string memory name,
-        string memory symbol,
-        uint8 modelId,
-        uint8 decimals,
-        uint256 totalSupply,
-        address initialOwner
-    ) internal returns (address instance) {
+    function _createBaseSubToken(
+        uint256 id
+    ) internal{
+        // This will bootstrap an Agent with following components:
+        // C1: create SubToken
+        // C2: mint dataNFT
+        // C3: Stake asset token to get veToken
         Application storage application = _applications[id];
         uint256 initialAmount = application.withdrawableAmount;
         application.withdrawableAmount = 0;
         application.status = ApplicationStatus.Executed;
-
-        instance = Clones.clone(tokenImplementation[modelId]);
-        uint256 poolSupply = getPoolSupply(modelId,totalSupply);
-
+        //C1
+        address instance = Clones.clone(tokenImplementation[application.modelId]);        
         ISubToken(instance).initialize(
-                    name,
-                    symbol,
-                    decimals,
-                    totalSupply,
-                    poolSupply,
-                    initialOwner
+                    application.name,
+                    application.symbol,
+                    application.decimals,
+                    application.totalSupply,
+                    application.initialOwner
         );
-
         allSubTokens.push(instance);
 
+        //C2
         uint256 subTokenId = IDataNft(nft).nextSubTokenId();
             IDataNft(nft).mint(
                 subTokenId,
@@ -198,24 +212,251 @@ contract TokenFactoryV2 is
                 instance
             );
         application.subTokenId = subTokenId;
-        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(modelId,initialAmount);
 
-        IERC20(assetToken).approve(assetVeToken, stakeAmount);
-        IVeToken(assetVeToken).stake(
+        //C3
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
+        if(stakeAmount > 0 ){
+            IERC20(assetToken).approve(assetVeToken, stakeAmount);
+            IVeToken(assetVeToken).stake(
                 stakeAmount,
                 instance,
                 instance
-        );
-
+            );
+        }
         if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
         if(poolAmount > 0) IERC20(assetToken).transfer(_vault, poolAmount);
-        if(poolSupply > 0) IERC20(instance).transfer(_vault, poolSupply);
 
         emit NewPersona(subTokenId, instance, address(0), address(0), address(0));  
+    }
+
+    function withdraw(uint256 id) public noReentrant {
+        Application storage application = _applications[id];
+
+        require(
+            msg.sender == application.proposer ||
+                hasRole(WITHDRAW_ROLE, msg.sender),
+            "Not proposer"
+        );
+
+        require(
+            application.status == ApplicationStatus.Active,
+            "Application is not active"
+        );
+
+        uint256 withdrawableAmount = application.withdrawableAmount;
+
+        application.withdrawableAmount = 0;
+        application.status = ApplicationStatus.Withdrawn;
+
+        IERC20(assetToken).safeTransfer(
+            application.proposer,
+            withdrawableAmount
+        );
+    }
+
+    function executeApplication(uint256 id, bool canStake) public noReentrant {
+        // This will bootstrap an Agent with following components:
+        // C1: SubToken
+        // C2: LP Pool + Initial liquidity
+        // C3: veToken
+        // C4: tokenDAO
+        // C5: dataNFT
+        // C6: subMinerPool
+        // C7: Stake liquidity token to get veToken
+
+        Application storage application = _applications[id];
+
+        require(
+            msg.sender == application.proposer ||
+                hasRole(WITHDRAW_ROLE, msg.sender),
+            "Not proposer"
+        );
+
+        _executeApplication(id, canStake);
+    }
+
+    function _executeApplication(
+        uint256 id,
+        bool canStake
+    ) internal {
+        require(
+            _applications[id].status == ApplicationStatus.Active,
+            "Application is not active"
+        );
+
+        Application storage application = _applications[id];
+        uint256 initialAmount = application.withdrawableAmount;
+        uint256 poolSupply = getPoolSupply(application.modelId,application.totalSupply);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
+        if(poolSupply == 0 || poolAmount == 0) return _createBaseSubToken(id);
+
+        application.withdrawableAmount = 0;
+        application.status = ApplicationStatus.Executed;
+
+        // C1 
+        address token = _createNewSubToken(
+            application.name, 
+            application.symbol, 
+            application.modelId, 
+            application.decimals, 
+            application.totalSupply
+            );
+        
+        //C2
+        address lp = _createPair(token);
+        _addLiquidity(token,poolSupply,poolAmount);
+
+        // C3
+        address veImpl = veTokenImplementation[application.modelId];
+        address veToken = _createNewVeToken(
+            string.concat("Staked ", application.name),
+            string.concat("s", application.symbol),
+            veImpl,
+            lp,
+            canStake
+        );
+
+        // C4
+        string memory daoName = string.concat(application.name, " DAO");
+        address daoimpl = daoImplementation[application.modelId];
+        address payable dao = payable(
+            _createNewDAO(
+                daoName,
+                daoimpl,
+                IVotes(veToken)
+            )
+        );
+
+        //C5
+        uint256 subTokenId = IDataNft(nft).nextSubTokenId();
+        IDataNft(nft).mint(
+            subTokenId,
+            _vault,
+            application.tokenURI,
+            payable(dao),
+            application.proposer,
+            lp,
+            token
+        );
+        application.subTokenId = subTokenId;
+
+        //C6
+        if(stakeAmount > 0 ) _createSubMinerPool(
+            application.modelId,
+            token,
+            veToken,
+            dao,
+            stakeAmount
+        );
+
+        // C7
+        _stake(lp,veToken,application.initialOwner);
+        ISubToken(token).transferOwnership(dao);
+        uint256 subAmount = IERC20(token).balanceOf(address(this));
+        if( subAmount > 0) IERC20(token).transfer(application.initialOwner, subAmount);
+        if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
+
+        emit NewPersona(subTokenId, token, dao, veToken, lp);  
+    }
+
+    function _createNewSubToken(
+        string memory name,
+        string memory symbol,
+        uint8 modelId,
+        uint8 decimals,
+        uint256 totalSupply
+    ) internal returns (address instance) {
+        instance = Clones.clone(tokenImplementation[modelId]);        
+        ISubToken(instance).initialize(
+            name,
+            symbol,
+            decimals,
+            totalSupply,
+            address(this)
+        );
+        allSubTokens.push(instance);
+    }
+/*
+    function _createNewSubToken2(
+        uint256 id,
+        string memory name,
+        string memory symbol,
+        uint8 modelId,
+        uint8 decimals,
+        uint256 totalSupply,
+        address initialOwner
+    ) internal returns (address instance) {
+        // This will bootstrap an Agent with following components:
+        // C1: SubToken
+        // C2: LP Pool + Initial liquidity
+        // C3: veToken
+        // C4: tokenDAO
+        // C5: dataNFT
+        // C6: subMinerPool
+        // C7: Stake liquidity token to get veToken
+
+        Application storage application = _applications[id];
+        uint256 initialAmount = application.withdrawableAmount;
+        application.withdrawableAmount = 0;
+        application.status = ApplicationStatus.Executed;
+        //C1
+        instance = Clones.clone(tokenImplementation[modelId]);        
+        ISubToken(instance).initialize(
+                    name,
+                    symbol,
+                    decimals,
+                    totalSupply,
+                    address(this)
+        );
+        allSubTokens.push(instance);
+
+        uint256 poolSupply = getPoolSupply(modelId,totalSupply);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(modelId,initialAmount);
+
+        //C2
+        address lp = poolAmount > 0 ? _createPair(instance) : address(0);
+        if(lp != address(0)) _addLiquidity(instance,poolSupply,poolAmount);
+
+        //C3 
+        string memory vename = string.concat("Staked ", application.name);
+        string memory vesymbol = string.concat("Staked ", application.symbol);
+        address veImpl = veTokenImplementation[modelId];
+        address subVeToken = modelId == 0 || lp == address(0) ? address(0) : _createNewVeToken(vename,vesymbol,veImpl,lp);
+
+        //C4
+        string memory daoname = string.concat(application.name, " DAO");
+        address daoimpl = daoImplementation[modelId];
+        address subTokenDAO = subVeToken == address(0) ? address(0) : _createNewDAO(daoname,daoimpl,IVotes(subVeToken));
+
+        //C5
+        uint256 subTokenId = IDataNft(nft).nextSubTokenId();
+            IDataNft(nft).mint(
+                subTokenId,
+                _vault,
+                application.tokenURI,
+                payable(subTokenDAO),
+                application.proposer,
+                lp,
+                instance
+            );
+        application.subTokenId = subTokenId;
+        
+        //C6
+        if(stakeAmount > 0 ) _createSubMinerPool(modelId,instance,subVeToken,subTokenDAO,stakeAmount);
+
+        // C7
+        if (lp != address(0) && subVeToken != address(0)) _stake(lp,subVeToken,initialOwner);
+        address subOwner = subTokenDAO == address(0) ? initialOwner : subTokenDAO;
+        ISubToken(instance).transferOwnership(subOwner);
+        uint256 subAmount = IERC20(instance).balanceOf(address(this));
+        if( subAmount > 0) IERC20(instance).transfer(initialOwner, subAmount);
+        if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
+
+        emit NewPersona(subTokenId, instance, subTokenDAO, subVeToken, lp);  
 
         return instance;
     }
-
+*/
     function _createPair(address subToken) internal returns (address uniswapV2Pair_) {
         uniswapV2Pair_ = IUniswapV2Factory(IUniswapV2Router02(_uniswapRouter).factory()).getPair(
             subToken,
@@ -229,9 +470,7 @@ contract TokenFactoryV2 is
         return (uniswapV2Pair_);
     }
 
-    function _addLiquidity(address subToken) internal {
-        uint256 subAmount = IERC20(subToken).balanceOf(address(this));
-        uint256 assetAmount = IERC20(assetToken).balanceOf(address(this));
+    function _addLiquidity(address subToken, uint256 subAmount, uint256 assetAmount) internal {
         require(subAmount > 0 && assetAmount > 0, "No Token For LiquidityPair");
 
         IERC20(subToken).approve(address(_uniswapRouter), subAmount);
@@ -249,6 +488,92 @@ contract TokenFactoryV2 is
             );
     }
 
+    function _createNewVeToken(
+        string memory name,
+        string memory symbol,
+        address veImpl,
+        address lp,
+        bool canstake
+    ) internal returns (address instance) {
+        instance = Clones.clone(veImpl);
+        IVeToken(instance).initialize(
+            name,
+            symbol,
+            address(this),
+            lp,
+            block.timestamp + maturityDuration,
+            canstake
+        );
+
+        allVeTokens.push(instance);
+        return instance;
+    }
+
+    function _createNewDAO(
+        string memory daoname,
+        address daoimpl,
+        IVotes token
+    ) internal returns (address instance) {
+        instance = Clones.clone(daoimpl);
+        ITokenDAO(instance).initialize(
+            daoname,
+            token,
+            daoThreshold,
+            daoVotingPeriod
+        );
+
+        allDAOs.push(instance);
+        return instance;
+    }
+
+    function _createSubMinerPool(
+        uint8 modelId,
+        address subToken,
+        address subVeToken,
+        address subVeTokenDAO,
+        uint256 stakeAmount
+    ) internal returns (address instance) {
+        address minerOwner = subVeTokenDAO;
+        if(modelId == 0 || subVeTokenDAO == address(0)){
+            instance = subToken;
+            minerOwner = subToken;
+        }else{
+            instance = Clones.clone(minerPoolImplementation[modelId]);
+            address minerPool = IVeToken(assetVeToken).mineaddr();
+            address mineToken = IMinerPool(minerPool).mineToken();
+            ISubMinerPool(instance).initialize(
+                mineToken,
+                subVeToken,
+                minerPool
+            );
+            allMinerPools.push(instance);
+            IVeToken(subVeToken).setMiner(instance);
+            ISubMinerPool(instance).grantRole(ISubMinerPool(instance).GOV_ROLE(), subVeTokenDAO);
+            ISubToken(subVeToken).transferOwnership(subVeTokenDAO);
+        }  
+        IERC20(assetToken).approve(assetVeToken, stakeAmount);
+        IVeToken(assetVeToken).stake(
+            stakeAmount,
+            instance,
+            minerOwner
+        );     
+
+        return instance;
+    }
+
+    function _stake(
+        address lp,
+        address subVeToken,
+        address account
+    ) internal {
+        IERC20(lp).approve(subVeToken, type(uint256).max);
+        IVeToken(subVeToken).stake(
+            IERC20(lp).balanceOf(address(this)),
+            account,
+            account
+        );
+    }
+
     function totalSubTokens() public view returns (uint256) {
         return allSubTokens.length;
     }
@@ -256,10 +581,10 @@ contract TokenFactoryV2 is
     function getApplicationThreshold() public view returns (uint256) {
         if (_uniswapRouter == address(0)) return applicationThreshold;
         address[] memory path = new address[](2);
-        path[0] = usdtToken;
-        path[1] = assetToken;
-        uint[] memory amounts = IRouter(_uniswapRouter).getAmountsOut(applicationThreshold, path);
-        return amounts[amounts.length - 1];
+        path[1] = usdtToken;
+        path[0] = assetToken;
+        uint[] memory amounts = IRouter(_uniswapRouter).getAmountsIn(applicationThreshold, path);
+        return amounts[0];
     }
 
     function getPoolSupply(uint8 modelId, uint256 totalSupply) public view returns (uint256) {
@@ -283,8 +608,27 @@ contract TokenFactoryV2 is
         _vault = newVault;
     }
 
-    function addImplementations(address token) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addImplementations(address token, address vetoken, address dao,address minerpool) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_isMigrated()," No Initialized");
         tokenImplementation.push(token);
+        veTokenImplementation.push(vetoken);
+        daoImplementation.push(dao);
+        minerPoolImplementation.push(minerpool);
+    }
+
+    function migrateV1() public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_getInitializedVersion() == 1 && tokenImplementation.length == 1,"Migrate Error");
+        require(veTokenImplementation.length == 0 && 
+            daoImplementation.length == 0 &&
+            minerPoolImplementation.length == 0,
+            "Migrated Error");
+        veTokenImplementation.push(address(0));
+        daoImplementation.push(address(0));
+        minerPoolImplementation.push(address(0));
+    }
+
+    function _isMigrated() internal view returns (bool) {
+        return _getInitializedVersion() == 1 && minerPoolImplementation.length >= 1;
     }
 
     function setUniswapRouter(
@@ -309,6 +653,12 @@ contract TokenFactoryV2 is
         address newToken
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         usdtToken = newToken;
+    }
+
+    function setMaturityDuration(
+        uint256 newDuration
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        maturityDuration = newDuration;
     }
 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {

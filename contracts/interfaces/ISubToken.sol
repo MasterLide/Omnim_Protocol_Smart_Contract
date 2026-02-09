@@ -14,7 +14,6 @@ interface ISubToken is IERC20 {
         string memory symbol,
         uint8 decimals,
         uint256 totalSupply,
-        uint256 poolSupply_,
         address initialOwner
     ) external;
 
@@ -23,4 +22,6 @@ interface ISubToken is IERC20 {
         uint256  values,
         bytes memory calldatas
     ) external;
+
+    function transferOwnership(address newOwner) external;
 }

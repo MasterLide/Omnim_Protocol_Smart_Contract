@@ -10,7 +10,7 @@ describe("SubToken", async function () {
 
   it("Should able to  mint()/executeOperations()/burn() ", async function () {
     const subToken = await viem.deployContract("SubToken");
-    await subToken.write.initialize(["SubToken","SBT",18,20000000000000000000n,1000000000000000000n,senderClient.account.address]);
+    await subToken.write.initialize(["SubToken","SBT",18,20000000000000000000n,senderClient.account.address]);
     await subToken.write.mint([subToken.address, 2000000000000000000n]);
     assert.equal(2000000000000000000n, await subToken.read.balanceOf([subToken.address]));
 
