@@ -21,8 +21,8 @@ export default buildModule("UseBaseV2Module", (m) => {
 
   m.call(veToken,"setMiner",[minerPool]);
 
-  m.call(mainToken,"approve",[veToken,args.stakeAmount]);
-  m.call(veToken,"stake",[args.stakeAmount,deployer,deployer]);
+  const b = m.call(mainToken,"approve",[veToken,args.stakeAmount]);
+  m.call(veToken,"stake",[args.stakeAmount,deployer,deployer],{after:[b]});
   m.call(mainToken,"mint",[minerPool,args.suppyMines]);   
   
   m.call(mainToken,"transferOwnership",[tokenDAO]);

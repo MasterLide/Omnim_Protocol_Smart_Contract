@@ -66,6 +66,8 @@ contract TokenFactoryV2 is
 
     event NewPersona(uint256 virtualId, address token, address dao, address veToken, address lp);
     event NewApplication(uint256 id);
+    event ApplicationExecuted(uint256 id);
+    event ApplicationWithdraw(uint256 id);
     event ApplicationThresholdUpdated(uint256 newThreshold);
 
     modifier noReentrant() {
@@ -226,7 +228,8 @@ contract TokenFactoryV2 is
         if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
         if(poolAmount > 0) IERC20(assetToken).transfer(_vault, poolAmount);
 
-        emit NewPersona(subTokenId, instance, address(0), address(0), address(0));  
+        emit NewPersona(subTokenId, instance, address(0), address(0), address(0));
+        emit ApplicationExecuted(id);
     }
 
     function withdraw(uint256 id) public noReentrant {
@@ -252,6 +255,7 @@ contract TokenFactoryV2 is
             application.proposer,
             withdrawableAmount
         );
+        emit ApplicationWithdraw(id);
     }
 
     function executeApplication(uint256 id, bool canStake) public noReentrant {
@@ -356,7 +360,8 @@ contract TokenFactoryV2 is
         if( subAmount > 0) IERC20(token).transfer(application.initialOwner, subAmount);
         if(burnAmount > 0) ISubToken(assetToken).burn(burnAmount);
 
-        emit NewPersona(subTokenId, token, dao, veToken, lp);  
+        emit NewPersona(subTokenId, token, dao, veToken, lp);
+        emit ApplicationExecuted(id);  
     }
 
     function _createNewSubToken(

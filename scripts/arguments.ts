@@ -40,12 +40,27 @@ const mainAddr = {
     TUSD: "0x0165878A594ca255338adfa4d48449f69242Eb8F"
 }
 
+const fluxTestAddr = {
+    PancakeRouter: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
+    DataNft: "0x295Eec078886CFBf44e96B2A3Bf08680De28DFF3",
+    MainToken: "0x85A5244d434211a27744e4076Ff34CD88a793FaE",
+    MinerPool: "0x5A94A4AB54Fd983E7b9dCa85D9792d2D758640A1",
+    SubMinerPool: "0x7d6a406376EA33c904F40bc23dE611cd222bd8c0",
+    SubToken: "0x0884C4f2F4342DDF62A7b96E1145C93065c816af",
+    TokenDAO: "0x522E96727d7e7e87Ef2aceFfFA7950aA76a633A7",
+    TokenFactoryV2: "0xbE45EB71B2fC2Bc9D53451C3a94169FeEEF3cb31",
+    VeToken: "0xedF4AfBF6eE78fbe2fF748A3bCf6917f3A22a9e3",
+    TUSD: "0x0884C4f2F4342DDF62A7b96E1145C93065c816af"
+}
+
 function getAddr(chainId : number){
     switch (chainId){
         case 31337:
             return opAddr;
         case 56:
             return mainAddr;
+        case 71:
+            return fluxTestAddr;
         case 97:
             return testAddr;
         default:

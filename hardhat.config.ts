@@ -56,5 +56,11 @@ export default defineConfig({
       url: "https://bsc-dataseed.binance.org",
       accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.MAINNET_PRIVATE_KEY] : [],
     },
+    fluxTestnet: {
+      type: "http",
+      chainType: "l1",
+      url: "https://evmtestnet.confluxrpc.com",
+      accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.FLUX_TESTNET_PRIVATE_KEY] : [],
+    },
   },
 });
