@@ -158,7 +158,7 @@ describe("FactorySystemV2 For localhost", async function () {
         address: tokenFactoryV2.address,
         abi:tokenFactoryV2.abi,
         functionName: 'executeApplication',
-        args: [2n, true],
+        args: [2n, true,0n],
       }),
       tokenFactoryV2,
       "NewPersona"

@@ -60,7 +60,7 @@ export default defineConfig({
       type: "http",
       chainType: "l1",
       url: "https://evmtestnet.confluxrpc.com",
-      accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.FLUX_TESTNET_PRIVATE_KEY] : [],
+      accounts: process.env.FLUX_TESTNET_PRIVATE_KEY ? [process.env.FLUX_TESTNET_PRIVATE_KEY] : [],
     },
   },
 });

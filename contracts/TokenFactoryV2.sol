@@ -216,7 +216,7 @@ contract TokenFactoryV2 is
         application.subTokenId = subTokenId;
 
         //C3
-        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount,0);
         if(stakeAmount > 0 ){
             IERC20(assetToken).approve(assetVeToken, stakeAmount);
             IVeToken(assetVeToken).stake(
@@ -258,7 +258,7 @@ contract TokenFactoryV2 is
         emit ApplicationWithdraw(id);
     }
 
-    function executeApplication(uint256 id, bool canStake) public noReentrant {
+    function executeApplication(uint256 id, bool canStake, uint256 _point) public noReentrant {
         // This will bootstrap an Agent with following components:
         // C1: SubToken
         // C2: LP Pool + Initial liquidity
@@ -270,18 +270,21 @@ contract TokenFactoryV2 is
 
         Application storage application = _applications[id];
 
+        require( (_point + burnPoint) <= DENOMINATOR,"point too big");
+
         require(
             msg.sender == application.proposer ||
                 hasRole(WITHDRAW_ROLE, msg.sender),
             "Not proposer"
         );
 
-        _executeApplication(id, canStake);
+        _executeApplication(id, canStake,_point);
     }
 
     function _executeApplication(
         uint256 id,
-        bool canStake
+        bool canStake,
+        uint256 _point
     ) internal {
         require(
             _applications[id].status == ApplicationStatus.Active,
@@ -290,8 +293,8 @@ contract TokenFactoryV2 is
 
         Application storage application = _applications[id];
         uint256 initialAmount = application.withdrawableAmount;
-        uint256 poolSupply = getPoolSupply(application.modelId,application.totalSupply);
-        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
+        uint256 poolSupply = getPoolSupply(application.modelId,application.totalSupply,_point);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount,_point);
         if(poolSupply == 0 || poolAmount == 0) return _createBaseSubToken(id);
 
         application.withdrawableAmount = 0;
@@ -592,14 +595,15 @@ contract TokenFactoryV2 is
         return amounts[0];
     }
 
-    function getPoolSupply(uint8 modelId, uint256 totalSupply) public view returns (uint256) {
+    function getPoolSupply(uint8 modelId, uint256 totalSupply, uint256 _point) public view returns (uint256) {
         if (modelId == 0 || poolPoint == 0) return 0;
-        return totalSupply * poolPoint / DENOMINATOR;
+        if (_point == 0 ) return totalSupply * poolPoint / DENOMINATOR;
+        return totalSupply * _point / DENOMINATOR;
     }
 
-    function getAmounts(uint8 modelId, uint256 amount) public view returns (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) {
+    function getAmounts(uint8 modelId, uint256 amount, uint256 _point) public view returns (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) {
         burnAmount = amount * burnPoint / DENOMINATOR;
-        poolAmount = (modelId == 0 || poolPoint == 0) ? 0 : amount * poolPoint / DENOMINATOR;
+        poolAmount = (modelId == 0 || poolPoint == 0) ? 0 : (_point == 0) ? amount * poolPoint / DENOMINATOR : amount * _point / DENOMINATOR;
         stakeAmount = amount - burnAmount - poolAmount;
     }
 
