@@ -216,7 +216,7 @@ contract TokenFactoryV2 is
         application.subTokenId = subTokenId;
 
         //C3
-        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount,0);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
         if(stakeAmount > 0 ){
             IERC20(assetToken).approve(assetVeToken, stakeAmount);
             IVeToken(assetVeToken).stake(
@@ -294,7 +294,7 @@ contract TokenFactoryV2 is
         Application storage application = _applications[id];
         uint256 initialAmount = application.withdrawableAmount;
         uint256 poolSupply = getPoolSupply(application.modelId,application.totalSupply,_point);
-        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount,_point);
+        (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) = getAmounts(application.modelId,initialAmount);
         if(poolSupply == 0 || poolAmount == 0) return _createBaseSubToken(id);
 
         application.withdrawableAmount = 0;
@@ -557,6 +557,7 @@ contract TokenFactoryV2 is
             allMinerPools.push(instance);
             IVeToken(subVeToken).setMiner(instance);
             ISubMinerPool(instance).grantRole(ISubMinerPool(instance).GOV_ROLE(), subVeTokenDAO);
+            ISubMinerPool(instance).grantRole(ISubMinerPool(instance).TOKEN_SAVER_ROLE(), subToken);
             ISubToken(subVeToken).transferOwnership(subVeTokenDAO);
         }  
         IERC20(assetToken).approve(assetVeToken, stakeAmount);
@@ -601,9 +602,9 @@ contract TokenFactoryV2 is
         return totalSupply * _point / DENOMINATOR;
     }
 
-    function getAmounts(uint8 modelId, uint256 amount, uint256 _point) public view returns (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) {
+    function getAmounts(uint8 modelId, uint256 amount) public view returns (uint256 stakeAmount, uint256  poolAmount, uint256 burnAmount) {
         burnAmount = amount * burnPoint / DENOMINATOR;
-        poolAmount = (modelId == 0 || poolPoint == 0) ? 0 : (_point == 0) ? amount * poolPoint / DENOMINATOR : amount * _point / DENOMINATOR;
+        poolAmount = (modelId == 0 || poolPoint == 0) ? 0 : amount * poolPoint / DENOMINATOR ;
         stakeAmount = amount - burnAmount - poolAmount;
     }
 

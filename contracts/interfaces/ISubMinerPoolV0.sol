@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface ISubMinerPool {
+interface ISubMinerPoolV0 {
     function initialize(
         address mineToken_,
         address stakeContract_,
@@ -17,6 +17,8 @@ interface ISubMinerPool {
     function grantRole(bytes32 role, address account) external;
 
     function claimMyMines(address account) external;
+
+    function withdraw(uint256 amount) external;
 
     function stakeContract() external view returns(address);
 

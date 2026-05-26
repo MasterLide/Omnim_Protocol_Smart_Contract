@@ -1,6 +1,6 @@
 const args  = {
     mainSuppy :    100000000000000000000000000n,
-    threshold :    100000000000000000000n,
+    threshold :    100_000_000_000_000_000_000n,
     votingPeriod : 3600,
     stakeAmount :  50000000000000000000000000n,
     suppyPool  :   20000000000000000000000000n,
