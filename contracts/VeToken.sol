@@ -97,6 +97,8 @@ contract VeToken is ERC20Upgradeable, ERC20VotesUpgradeable, OwnableUpgradeable 
             "Insufficient asset token allowance"
         );
 
+        if(mineaddr != address(0)) IMiner(mineaddr).newStake(receiver, amount);
+
         IERC20(assetToken).safeTransferFrom(sender, address(this), amount);
         _mint(receiver, amount);
         _delegate(receiver, delegatee);
@@ -104,8 +106,6 @@ contract VeToken is ERC20Upgradeable, ERC20VotesUpgradeable, OwnableUpgradeable 
             clock(),
             SafeCast.toUint208(balanceOf(receiver))
         );
-
-        if(mineaddr != address(0)) IMiner(mineaddr).newStake(receiver, amount);
     }
 
     function setCanStake(bool _canStake) public onlyOwner{
@@ -125,6 +125,8 @@ contract VeToken is ERC20Upgradeable, ERC20VotesUpgradeable, OwnableUpgradeable 
         require(balanceOf(sender) >= amount, "Insufficient balance");
         require(block.timestamp >= matureAt, "Not mature yet");
 
+        if(mineaddr != address(0)) IMiner(mineaddr).removeStake(sender, amount);
+
         _burn(sender, amount);
         _balanceCheckpoints[sender].push(
             clock(),
@@ -132,8 +134,6 @@ contract VeToken is ERC20Upgradeable, ERC20VotesUpgradeable, OwnableUpgradeable 
         );
 
         IERC20(assetToken).safeTransfer(sender, amount);
-
-        if(mineaddr != address(0)) IMiner(mineaddr).removeStake(sender, amount);
     }
 
     function getPastBalanceOf(
